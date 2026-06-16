@@ -190,25 +190,39 @@ jobs:
 
   simulator_driving:
     name: simulator driving
-    runs-on: ${{
-      (github.repository == 'commaai/openpilot') &&
-      ((github.event_name != 'pull_request') ||
-      (github.event.pull_request.head.repo.full_name == 'commaai/openpilot'))
-      && fromJSON('["namespace-profile-amd64-8x16"]')
-      || fromJSON('["ubuntu-24.04"]') }}
-    if: false  # FIXME: Started to timeout recently
+    # Must run on the free, open-source Actions runner (not a higher tier), per #30693
+    runs-on: ubuntu-24.04
+    env:
+      # write all logs (qlog, rlog, camera) into the workspace so they can be uploaded as an artifact
+      LOG_ROOT: ${{ github.workspace }}/sim_logs
     steps:
     - uses: actions/checkout@v6
       with:
         submodules: true
     - run: ./tools/op.sh setup
+    - name: Cache scons build
+      uses: actions/cache@v4
+      with:
+        path: /tmp/scons_cache
+        key: scons-sim-${{ runner.os }}-${{ github.sha }}
+        restore-keys: |
+          scons-sim-${{ runner.os }}-
     - name: Build openpilot
       run: scons
     - name: Driving test
-      timeout-minutes: 2
+      # The sim runs in real time (1 min of driving == 1 min of CI), so give it ample headroom.
+      timeout-minutes: 10
       run: |
         source selfdrive/test/setup_xvfb.sh
         pytest -s tools/sim/tests/test_metadrive_bridge.py
+    - name: Upload logs (qlog, rlog, camera)
+      if: always()
+      continue-on-error: true
+      uses: actions/upload-artifact@v6
+      with:
+        name: sim-logs-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ github.workspace }}/sim_logs
+        if-no-files-found: warn
 
   create_ui_report:
     name: Create UI Report

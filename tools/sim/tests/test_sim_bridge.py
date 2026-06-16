@@ -1,4 +1,5 @@
 import os
+import signal
 import subprocess
 import time
 import pytest
@@ -22,7 +23,8 @@ class TestSimBridgeBase:
 
   def test_driving(self):
     # Startup manager and bridge.py. Check processes are running, then engage and verify.
-    p_manager = subprocess.Popen("./launch_openpilot.sh", cwd=SIM_DIR)
+    # start_new_session so the whole manager process group can be cleaned up in teardown
+    p_manager = subprocess.Popen("./launch_openpilot.sh", cwd=SIM_DIR, start_new_session=True)
     self.processes.append(p_manager)
 
     sm = messaging.SubMaster(['selfdriveState', 'onroadEvents', 'managerState'])
@@ -31,7 +33,8 @@ class TestSimBridgeBase:
     p_bridge = bridge.run(q, retries=10)
     self.processes.append(p_bridge)
 
-    max_time_per_step = 60
+    # the free CI runner is slow and the sim runs in real time, so allow more startup/settle time
+    max_time_per_step = 120 if os.getenv("CI") else 60
 
     # Wait for bridge to startup
     start_waiting = time.monotonic()
@@ -86,7 +89,20 @@ class TestSimBridgeBase:
   def teardown_method(self):
     print("Test shutting down. CommIssues are acceptable")
     for p in reversed(self.processes):
-      p.terminate()
+      if isinstance(p, subprocess.Popen):
+        # p_manager was started with start_new_session=True, so kill its whole
+        # process group to make sure none of manager's children linger and hang teardown.
+        try:
+          os.killpg(os.getpgid(p.pid), signal.SIGKILL)
+        except (ProcessLookupError, PermissionError, OSError):
+          pass
+      else:
+        # the bridge is a multiprocessing.Process in pytest's own process group,
+        # so terminate it directly rather than signalling the group.
+        p.terminate()
 
     for p in reversed(self.processes):
-      p.kill()
+      try:
+        p.kill()
+      except (ProcessLookupError, OSError):
+        pass
