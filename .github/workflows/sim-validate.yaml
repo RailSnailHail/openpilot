@@ -60,7 +60,7 @@ jobs:
         timeout-minutes: 10
         run: |
           source selfdrive/test/setup_xvfb.sh
-          pytest -s -p no:xdist tools/sim/tests/test_metadrive_bridge.py
+          pytest -s -n0 tools/sim/tests/test_metadrive_bridge.py
       - name: DIAG where did logs go
         if: always()
         run: |
