@@ -72,10 +72,21 @@ jobs:
           find "$HOME/.comma" -type f 2>/dev/null | head -80 || true
           echo "== any qlog/rlog/hevc/ts anywhere in work dir =="
           find "$GITHUB_WORKSPACE" "$HOME" -type f \( -name 'qlog*' -o -name 'rlog*' -o -name '*.hevc' -o -name 'qcamera*' \) 2>/dev/null | head -80 || true
-          echo "== manager.log: loggerd/encoderd/errors =="
-          grep -iE "loggerd|encoderd|logger|started|stopped|exit|error|traceback|crash|killed" /tmp/manager.log 2>/dev/null | tail -80 || echo "no manager.log"
-          echo "== manager.log tail =="
-          tail -50 /tmp/manager.log 2>/dev/null || true
+          echo "== manager.log: modeld context =="
+          grep -niE "modeld|Traceback|Error|killed|signal|memory|exception" /tmp/manager.log 2>/dev/null | head -120 || echo "no manager.log"
+          echo "== free mem =="; free -m || true
+          cp /tmp/manager.log "$GITHUB_WORKSPACE/manager_full.log" 2>/dev/null || true
+          sudo dmesg 2>/dev/null | grep -iE "kill|oom|segfault|modeld|python" | tail -60 > "$GITHUB_WORKSPACE/dmesg_tail.txt" || true
+      - name: Upload diag logs
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v6
+        with:
+          name: diag-manager-${{ matrix.run }}
+          path: |
+            ${{ github.workspace }}/manager_full.log
+            ${{ github.workspace }}/dmesg_tail.txt
+          if-no-files-found: warn
       - name: Upload logs (qlog, rlog, camera)
         if: always()
         continue-on-error: true
