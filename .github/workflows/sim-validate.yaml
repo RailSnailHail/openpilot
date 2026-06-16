@@ -60,7 +60,7 @@ jobs:
         timeout-minutes: 10
         run: |
           source selfdrive/test/setup_xvfb.sh
-          pytest -s tools/sim/tests/test_metadrive_bridge.py
+          pytest -s -p no:xdist tools/sim/tests/test_metadrive_bridge.py
       - name: DIAG where did logs go
         if: always()
         run: |
@@ -72,6 +72,10 @@ jobs:
           find "$HOME/.comma" -type f 2>/dev/null | head -80 || true
           echo "== any qlog/rlog/hevc/ts anywhere in work dir =="
           find "$GITHUB_WORKSPACE" "$HOME" -type f \( -name 'qlog*' -o -name 'rlog*' -o -name '*.hevc' -o -name 'qcamera*' \) 2>/dev/null | head -80 || true
+          echo "== manager.log: loggerd/encoderd/errors =="
+          grep -iE "loggerd|encoderd|logger|started|stopped|exit|error|traceback|crash|killed" /tmp/manager.log 2>/dev/null | tail -80 || echo "no manager.log"
+          echo "== manager.log tail =="
+          tail -50 /tmp/manager.log 2>/dev/null || true
       - name: Upload logs (qlog, rlog, camera)
         if: always()
         continue-on-error: true
