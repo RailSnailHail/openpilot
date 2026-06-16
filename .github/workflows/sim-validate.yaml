@@ -61,6 +61,17 @@ jobs:
         run: |
           source selfdrive/test/setup_xvfb.sh
           pytest -s tools/sim/tests/test_metadrive_bridge.py
+      - name: DIAG where did logs go
+        if: always()
+        run: |
+          echo "== LOG_ROOT=$LOG_ROOT =="
+          ls -la "$LOG_ROOT" 2>/dev/null || echo "LOG_ROOT missing"
+          echo "== files under LOG_ROOT =="
+          find "$LOG_ROOT" -type f 2>/dev/null | head -80 || true
+          echo "== files under ~/.comma =="
+          find "$HOME/.comma" -type f 2>/dev/null | head -80 || true
+          echo "== any qlog/rlog/hevc/ts anywhere in work dir =="
+          find "$GITHUB_WORKSPACE" "$HOME" -type f \( -name 'qlog*' -o -name 'rlog*' -o -name '*.hevc' -o -name 'qcamera*' \) 2>/dev/null | head -80 || true
       - name: Upload logs (qlog, rlog, camera)
         if: always()
         continue-on-error: true

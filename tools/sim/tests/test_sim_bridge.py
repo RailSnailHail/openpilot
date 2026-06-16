@@ -63,8 +63,19 @@ class TestSimBridgeBase:
     min_counts_control_active = 100
     control_active = 0
 
+    last_print = 0.0
     while time.monotonic() < start_time + max_time_per_step:
       sm.update()
+
+      ss = sm['selfdriveState']
+      now = time.monotonic()
+      if now - last_print > 1.0:
+        last_print = now
+        events = [e.name for e in sm['onroadEvents']]
+        print(f"[DIAG] t={now-start_time:4.0f} all_alive={sm.all_alive()} "
+              f"ss_alive={sm.alive.get('selfdriveState')} active={ss.active} "
+              f"enabled={ss.enabled} engageable={ss.engageable} state={ss.state} "
+              f"ca={control_active} events={events}", flush=True)
 
       if sm.all_alive() and sm['selfdriveState'].active:
         control_active += 1
@@ -72,6 +83,7 @@ class TestSimBridgeBase:
         if control_active == min_counts_control_active:
           break
 
+    print(f"[DIAG] final control_active={control_active}", flush=True)
     assert min_counts_control_active == control_active, f"Simulator did not engage a minimal of {min_counts_control_active} steps was {control_active}"
 
     failure_states = []
