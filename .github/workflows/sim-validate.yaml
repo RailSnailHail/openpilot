@@ -1,0 +1,71 @@
+name: sim-validate
+
+# Validation-only workflow (NOT part of the PR). Runs the MetaDrive sim test
+# N times in parallel on the free ubuntu-24.04 runner to measure reliability.
+
+on:
+  workflow_dispatch:
+    inputs:
+      count:
+        description: 'number of parallel attempts'
+        default: '20'
+        required: true
+        type: string
+
+concurrency:
+  group: sim-validate-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: 1
+  PYTHONPATH: ${{ github.workspace }}
+
+jobs:
+  gen-matrix:
+    name: build matrix
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - id: set
+        run: |
+          n='${{ github.event.inputs.count }}'
+          echo "matrix=$(python3 -c "import json,sys; print(json.dumps(list(range(1,int('$n')+1))))")" >> "$GITHUB_OUTPUT"
+
+  sim:
+    name: sim attempt ${{ matrix.run }}
+    needs: gen-matrix
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        run: ${{ fromJSON(needs.gen-matrix.outputs.matrix) }}
+    env:
+      LOG_ROOT: ${{ github.workspace }}/sim_logs
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: true
+      - run: ./tools/op.sh setup
+      - name: Cache scons build
+        uses: actions/cache@v4
+        with:
+          path: /tmp/scons_cache
+          key: scons-sim-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            scons-sim-${{ runner.os }}-
+      - name: Build openpilot
+        run: scons
+      - name: Driving test
+        timeout-minutes: 10
+        run: |
+          source selfdrive/test/setup_xvfb.sh
+          pytest -s tools/sim/tests/test_metadrive_bridge.py
+      - name: Upload logs (qlog, rlog, camera)
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v6
+        with:
+          name: sim-logs-attempt-${{ matrix.run }}
+          path: ${{ github.workspace }}/sim_logs
+          if-no-files-found: warn
